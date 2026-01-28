@@ -1,81 +1,117 @@
 #PSWriteHTML modülünü içe aktarır ~ Skriptin HTML raporları oluşturmak için gerekli modül ~ Dashimo Modulü arsive kaldirildi ve en güncel desteklenen PSWriteHTML
-
 Import-Module PSWriteHTML   #https://github.com/EvotecIT/PSWriteHTML
+
+Write-Host "PSWriteHTML modulu yuklendi." -ForegroundColor Green
 
 #---------------------------------------------PATHS--------------------------------------------------------------------------
 
 $BasePath = '\\irt-fss\irt-fs2\SERVICE\IT-HiWi\SWVV2'  #SWVV2 ana dizini
+$ComputerList = Get-Content "$BasePath\Daten\computer_list.txt"
+$ReportPath = "$BasePath\HTML\WVR.html"
 
-#SWVV skriptinin kullanilacagi bilgisayarlarin listesini computers variable'ina atar
-#Bu .txt dosyasindan bilgisayar isimlerini okur ve her satiri bir bilgisayar ismi olarak alir
-$ComputerList = Get-Content '$BasePath\Daten\computer_list.txt'
+#---------------------------------------------INIT-------------------------------------------------------------------------
 
-#Windows Versiyon Raporunun kaydedildigi html dosyasinin yolu
-$ReportPath = '$BasePath\HTML\WVR.html'
+$Results = @()
+$ExportTime = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
-#admin yetkileri icin gerekli xml dosyasinin yolu
-$sudo = '$BasePath\Daten\rechte.xml'
-
-
-#Bilgisayar isimlerini içeren listeyi alır ve çevrimiçi olanları filtreler
-
-$OnlineComputers  = @()
-$OfflineComputers = @()
+#---------------------------------------------COLLECT DATA-----------------------------------------------------------------
 
 foreach ($Computer in $ComputerList) {
-    if (Test-Connection -ComputerName $Computer -Count 1 -Quiet) {
-        $OnlineComputers += $Computer
-    } else {
-        $OfflineComputers += [PSCustomObject]@{
-            ComputerName = $Computer
-            Status       = 'Offline'
+
+    Write-Host "Kontrol ediliyor: $Computer" -NoNewline
+
+    try {
+        if ($Computer -ieq $env:COMPUTERNAME) {
+            $os  = Get-CimInstance Win32_OperatingSystem
+            $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+        }
+        else {
+            $data = Invoke-Command -ComputerName $Computer -ErrorAction Stop -ScriptBlock {
+                $os  = Get-CimInstance Win32_OperatingSystem
+                $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+
+                [PSCustomObject]@{
+                    Caption        = $os.Caption
+                    Version        = $os.Version
+                    Build          = [int]$os.BuildNumber
+                    DisplayVersion = $reg.DisplayVersion
+                }
+            }
+            $os  = $data
+            $reg = $data
+        }
+
+        Write-Host " ONLINE" -ForegroundColor Green
+
+        $Results += [PSCustomObject]@{
+            ComputerName   = $Computer
+            OSName         = $os.Caption
+            Version        = $os.Version
+            Build          = [int]$os.Build
+            DisplayVersion = $os.DisplayVersion
+            OfflineReason  = 'OK'
+        }
+    }
+    catch {
+        Write-Host " OFFLINE" -ForegroundColor Red
+
+        $Results += [PSCustomObject]@{
+            ComputerName   = $Computer
+            OSName         = 'N/A'
+            Version        = 'N/A'
+            Build          = 0
+            DisplayVersion = 'Offline'
+            OfflineReason  = 'UNREACHABLE'
         }
     }
 }
 
-#Çevrimiçi bilgisayarlardan Windows sürümü bilgilerini toplar
+#---------------------------------------------CHART DATA------------------------------------------------------------------
 
-$WindowsInfo = Invoke-Command -ComputerName $OnlineComputers `
-    -Credential $sudo `
-    -ThrottleLimit 20 `
-    -ErrorAction SilentlyContinue `
-    -ScriptBlock {
+$ChartLabels = @(
+    'Win11 24H2+',
+    'Win11 23H2',
+    'Win10 or Older',
+    'Offline'
+)
 
-        $os  = Get-CimInstance Win32_OperatingSystem
-        $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+$ChartValues = @(
+    ($Results | Where-Object { $_.Build -ge 26100 }).Count,
+    ($Results | Where-Object { $_.Build -ge 22631 -and $_.Build -lt 26100 }).Count,
+    ($Results | Where-Object { $_.Build -gt 0 -and $_.Build -lt 22631 }).Count,
+    ($Results | Where-Object { $_.Build -eq 0 }).Count
+)
 
-        [PSCustomObject]@{
-            ComputerName   = $env:COMPUTERNAME
-            OSName         = $os.Caption
-            Version        = $os.Version
-            Build          = [int]$os.BuildNumber
-            DisplayVersion = $reg.DisplayVersion
+#---------------------------------------------HTML REPORT------------------------------------------------------------------
+
+Write-Host "HTML raporu olusturuluyor..." -ForegroundColor Yellow
+
+New-HTML -TitleText 'Windows Version Inventory' -FilePath $ReportPath {
+
+    New-HTMLSection -HeaderText 'Summary' {
+        New-HTMLText -Text "Export Time: $ExportTime"
+        New-HTMLText -Text "Total Computers: $($Results.Count)"
+    }
+
+    New-HTMLSection -HeaderText 'Build Distribution' {
+        New-HTMLChart -Category $ChartLabels {
+            New-ChartBar -Name 'Computers' -Value $ChartValues
         }
     }
 
-
-
-#HTML raporunu oluşturur ve Windows sürümü bilgilerini tablo olarak ekler
-New-HTML -TitleText 'Windows Version Inventory' -FilePath $ReportPath {
-
-    # ONLINE COMPUTERS
-    New-HTMLSection -HeaderText 'Online Computers' {
-
-        New-HTMLTable -DataTable $WindowsInfo `
-            -Title 'Windows Sürüm Durumu' `
-            -Paging `
+    New-HTMLSection -HeaderText 'All Computers' {
+        New-HTMLTable -DataTable $Results `
+            -Title 'Windows Inventory' `
+            -PagingLength 25 `
             -Searching `
             -Sorting `
             -ConditionalFormatting {
 
-                # 🟢 Windows 11 24H2+
                 New-HTMLTableCondition -Name 'Build' -Operator ge -Value 26100 -BackgroundColor LightGreen
-
-                # 🟡 Windows 11 23H2
                 New-HTMLTableCondition -Name 'Build' -Operator ge -Value 22631 -BackgroundColor Khaki
-
-                # 🔴 Eski / Windows 10
                 New-HTMLTableCondition -Name 'Build' -Operator lt -Value 22631 -BackgroundColor Salmon
             }
     }
 }
+
+Write-Host "HTML raporu basariyla olusturuldu: $ReportPath" -ForegroundColor Green
