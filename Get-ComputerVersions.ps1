@@ -2,6 +2,7 @@
 
 $ErrorActionPreference = "SilentlyContinue"
 
+#Enter your own main data path
 $DataPath = ""
 $ExportPath = "$DataPath\Raw-Data\$($env:COMPUTERNAME).csv"
 # 64-bit and 32-bit Registry Paths
@@ -10,6 +11,7 @@ $RegPaths = @(
     "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
 )
 
+ 
 # Pull apps & software and filter them
 $InstalledSoftware = Get-ItemProperty $RegPaths |
     Select-Object DisplayName, DisplayVersion |
@@ -26,6 +28,12 @@ if (-not $WinVer) {
 # Add Windows Version to the List
 $SoftwareList = [System.Collections.ArrayList]$InstalledSoftware
 $SoftwareList.Add([PSCustomObject]@{ DisplayName = "WinVer"; DisplayVersion = $WinVer }) | Out-Null
+
+# Save last execution date
+$LastExecuteDate = Get-Date -Format "dd.MM.yyyy HH:mm:ss"
+
+# Add last execution date as if it was a Software itself to the list
+$SoftwareList.Add([PSCustomObject]@{ DisplayName = "Scan Date"; DisplayVersion = $LastExecuteDate}) | Out-Null   
 
 # Add to CSV
 $SoftwareList | ConvertTo-Csv -Delimiter ";" -NoTypeInformation | 
