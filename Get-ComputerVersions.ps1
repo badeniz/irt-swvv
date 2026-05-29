@@ -2,10 +2,9 @@
 
 $ErrorActionPreference = "SilentlyContinue"
 
-#Enter your own main data path
+# Enter your own path
 $DataPath = ""
 $ExportPath = "$DataPath\Raw-Data\$($env:COMPUTERNAME).csv"
-
 # 64-bit and 32-bit Registry Paths
 $RegPaths = @(
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
