@@ -2,7 +2,7 @@
 
 # Main data path to be given
 $DataPath = "\\irt-fss\irt-fs2\SERVICE\IT-HiWi\SWVV-Modern\Daten"
-$RawDataPath = "$DataPath\Raw-Data"
+$RawDataPath = "$DataPath\Rohdata"
 $HTMLPath = "$DataPath\HTML"
 
 # Ensure directories exist
@@ -50,7 +50,10 @@ $Latest["NotePad++"] = Get-WebVersion -Url "https://notepad-plus-plus.org/downlo
 
 # Static definitions to save time and update manually
 #Should be updated manually, but saves time and resources. You can add as many as you want, just make sure to add them to the $Latest hashtable with the same key as the software name in the CSV file.
-$Latest["Adobe Acrobat Reader"] = "21.007.20099"
+$Latest["WinVer"]               = "25H2"
+$Latest["Office 16 Click-to-Run Localization Component"] = "16.0.10382.20010"
+$Latest["MATLAB R2024a"]         = "24.1"
+$Latest["Adobe Acrobat (64-bit)"] = "21.007.20099"
 $Latest["GPL GhostScript"]      = "9.55.0"
 $Latest["Eclipse Temurin JDK"]  = "8.0.302.8"
 $Latest["Citavi"]               = "6.10.0.0"
@@ -60,9 +63,8 @@ $Latest["CorelDRAW"]            = "25.0"
 $Latest["Python"]               = "3.10.7581.0"
 $Latest["Sciebo"]               = "2.8.2.4365"
 $Latest["Visual Studio Community 2019"] = "16.11.7"
-$Latest["MATLAB 2024a"]         = "24.1"
-$Latest["Microsoft Office Professional Plus"] = "16.0.10382.20010"
-$Latest["WinVer"]               = "25H2"
+
+
 
 #HTML CSS and Style Definitions
 $HTML_Head = @"
@@ -80,6 +82,7 @@ $HTML_Head = @"
     .links a.UTD { color: #28a745; }
     .meta-info { color: #555; font-size: 14px; margin-bottom: 15px; }
     .scan-alert { color: #dc3545; font-weight: bold; } /* Alert for outdated scans */
+    .mid-alert { color: #ff9c07; font-weight: bold; } /* Alert for mid-outdated scans */
 </style></head><body>
 "@
 
@@ -108,7 +111,7 @@ Get-ChildItem -Path $RawDataPath -Filter "*.csv" | ForEach-Object {
             if ($DaysAgo -gt 7) {
                 # If the last scan was more than 7 days ago, mark it as outdated
                 $ScanDateStyle = "class='scan-alert'"
-                $DateDetails = " ($DaysAgo days ago - NOT UPDATED!)"
+                $DateDetails = " ($DaysAgo days ago - Outdated!)"
                 $HasOutdated = $true
             } else {
                 $DateDetails = " ($DaysAgo days ago)"
@@ -129,6 +132,25 @@ Get-ChildItem -Path $RawDataPath -Filter "*.csv" | ForEach-Object {
     $DiskRow = $PCData | Where-Object { $_.DisplayName -match "System Drive Info" } | Select-Object -Last 1
     $DiskInfo = if ($DiskRow.DisplayVersion) { $DiskRow.DisplayVersion.Trim() } else { "No Data" }
 
+    #check if the disk space is lower than 30gb free, if so mark as scan-alert
+    if ($DiskInfo -ne "No Data") {
+        if ($DiskInfo -match "(\d+)% Free \((\d+) GB free of (\d+) GB\)") {
+            $FreePercent = [int]$Matches[1]
+            $FreeGB = [int]$Matches[2]
+            
+            if ($FreeGB -lt 30) {
+                $DiskInfo = "<span class='scan-alert'>$DiskInfo (Low Space!)</span>"
+                $HasOutdated = $true
+            } elseif ($FreeGB -ge 30 -and $FreeGB -lt 50) {
+                $DiskInfo = "<span class='mid-alert'>$DiskInfo (Getting Low!)</span>"
+            }
+        }
+    }
+
+    # Read hardware details (PC:Info) from the CSV
+    $PCInfoRow = $PCData | Where-Object { $_.DisplayName -match "PC:Info" } | Select-Object -Last 1
+    $PCInfoSpecs = if ($PCInfoRow.DisplayVersion) { $PCInfoRow.DisplayVersion.Trim() } else { "No Data" }
+
     foreach ($SoftName in $Latest.Keys) {
         $Installed = $PCData | Where-Object { $_.DisplayName -match [regex]::Escape($SoftName) } | Select-Object -Last 1
         $LatestVer = $Latest[$SoftName]
@@ -137,19 +159,34 @@ Get-ChildItem -Path $RawDataPath -Filter "*.csv" | ForEach-Object {
         if ($Installed) {
             $InstVerStr = $Installed.DisplayVersion -replace '[^\d\.]', '' # Only digits and dots
             
-            try {
-                $vInst = [version]$InstVerStr
-                $vLate = [version]($LatestVer -replace '[^\d\.]', '')
-                
-                if ($vInst -ge $vLate) { 
-                    $StatusInfo = "UTD" 
-                } elseif ($vInst.Major -lt $vLate.Major) { 
-                    $StatusInfo = "OOD"; $HasOutdated = $true 
-                } else { 
-                    $StatusInfo = "SOOD"; $HasOutdated = $true 
+            # Specific textual evaluation for Windows version (WinVer)
+            if ($SoftName -eq "WinVer") {
+                $CleanedVersion = $Installed.DisplayVersion.Trim()
+                if ($CleanedVersion -eq "25H2") {
+                    $StatusInfo = "UTD" # Green
+                } elseif ($CleanedVersion -eq "24H2") {
+                    $StatusInfo = "SOOD" # Orange / Yellow
+                    $HasOutdated = $true
+                } else {
+                    $StatusInfo = "OOD" # Anything else is Red
+                    $HasOutdated = $true
                 }
-            } catch {
-                if ($Installed.DisplayVersion -eq $LatestVer) { $StatusInfo = "UTD" } else { $StatusInfo = "OOD"; $HasOutdated = $true }
+            } else {
+                # Standard version comparison for all other applications
+                try {
+                    $vInst = [version]$InstVerStr
+                    $vLate = [version]($LatestVer -replace '[^\d\.]', '')
+                    
+                    if ($vInst -ge $vLate) { 
+                        $StatusInfo = "UTD" 
+                    } elseif ($vInst.Major -lt $vLate.Major) { 
+                        $StatusInfo = "OOD"; $HasOutdated = $true 
+                    } else { 
+                        $StatusInfo = "SOOD"; $HasOutdated = $true 
+                    }
+                } catch {
+                    if ($Installed.DisplayVersion -eq $LatestVer) { $StatusInfo = "UTD" } else { $StatusInfo = "OOD"; $HasOutdated = $true }
+                }
             }
 
             $ReportData += [PSCustomObject]@{
@@ -169,12 +206,16 @@ Get-ChildItem -Path $RawDataPath -Filter "*.csv" | ForEach-Object {
     $TableHTML = $TableHTML -replace '<tr><td>(.*?)</td><td>(.*?)</td><td>(.*?)</td><td>SOOD</td></tr>', '<tr class="SOOD"><td>$1</td><td>$2</td><td>$3</td><td>Minor update available</td></tr>'
     $TableHTML = $TableHTML -replace '<tr><td>(.*?)</td><td>(.*?)</td><td>(.*?)</td><td>OOD</td></tr>', '<tr class="OOD"><td>$1</td><td>$2</td><td>$3</td><td>Old</td></tr>'
     $TableHTML = $TableHTML -replace '<tr><td>(.*?)</td><td>(.*?)</td><td>(.*?)</td><td>Not Found</td></tr>', '<tr><td>$1</td><td>$2</td><td>$3</td><td>Not downloaded</td></tr>'
+    
+    # Mask the long Registry name of Office as "Office M365" in the HTML output table
+    $TableHTML = $TableHTML -replace '<td>Office 16 Click-to-Run Localization Component</td>', '<td>Office M365</td>'
 
     # HTML Save according to PC
     $FinalHTML = $HTML_Head + "<h2>$PCName Update Status</h2>"
     $FinalHTML += "<div class='meta-info'>"
     $FinalHTML += "<span $ScanDateStyle><strong>Last Scan:</strong> $LastScan$DateDetails</span> | "
-    $FinalHTML += "<strong>C: Disk Space:</strong> $DiskInfo"
+    $FinalHTML += "<strong>C: Disk Space:</strong> $DiskInfo | "
+    $FinalHTML += "<strong>PC Specifications:</strong> $PCInfoSpecs"
     $FinalHTML += "</div>"
     $FinalHTML += $TableHTML + "</body></html>"
     
