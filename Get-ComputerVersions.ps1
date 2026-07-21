@@ -3,9 +3,14 @@
 #$ErrorActionPreference = "SilentlyContinue"
 
 # Define paths on the server for the export file
+<<<<<<< HEAD
 # Add your own Network Path
 $DataPath = ""
 $ExportPath = "$DataPath\Rawdata\$($env:COMPUTERNAME).csv"
+=======
+$DataPath = "\\irt-fss\irt-fs2\SERVICE\IT-HiWi\SWVV-Modern\Daten"
+$ExportPath = "$DataPath\Rohdata\$($env:COMPUTERNAME).csv"
+>>>>>>> 43e1ddae3727aa7b2b832bf9f256676018b39e2b
 
 #Registry paths to pull installed software from
 $RegPaths = @(
