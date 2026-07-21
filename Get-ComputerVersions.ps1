@@ -3,14 +3,9 @@
 #$ErrorActionPreference = "SilentlyContinue"
 
 # Define paths on the server for the export file
-<<<<<<< HEAD
 # Add your own Network Path
 $DataPath = ""
 $ExportPath = "$DataPath\Rawdata\$($env:COMPUTERNAME).csv"
-=======
-$DataPath = "\\irt-fss\irt-fs2\SERVICE\IT-HiWi\SWVV-Modern\Daten"
-$ExportPath = "$DataPath\Rohdata\$($env:COMPUTERNAME).csv"
->>>>>>> 43e1ddae3727aa7b2b832bf9f256676018b39e2b
 
 #Registry paths to pull installed software from
 $RegPaths = @(
@@ -41,7 +36,7 @@ $UsedSpaceGB = $TotalSizeGB - $FreeSpaceGB
 $UsedPercent = 100 - $FreePercent
 $DiskInfoStr = "$FreePercent% Free ($FreeSpaceGB GB free of $TotalSizeGB GB) | $UsedPercent% Used ($UsedSpaceGB GB of $TotalSizeGB GB)"
 
-# Hardware Information (RAM with MHz, CPU, GPU)
+# Hardware Information (RAM, CPU, GPU)
 $RAM_GB = Get-CimInstance Win32_ComputerSystem | ForEach-Object { [math]::Round($_.TotalPhysicalMemory / 1GB, 0) }
 $RAM_MHz = (Get-CimInstance Win32_PhysicalMemory | Select-Object -First 1).ConfiguredClockSpeed
 $CPU = (Get-CimInstance Win32_Processor).Name
