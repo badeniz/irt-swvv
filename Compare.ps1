@@ -20,9 +20,9 @@ function Get-WebVersion {
 # Determine updated versions
 $Latest = @{}
 
-# Chrome API
+# Chrome API, version is the 5th newest release!
 $ChromeAPI = Invoke-RestMethod "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions"
-$Latest["Google Chrome"] = $ChromeAPI.versions[0].version
+$Latest["Google Chrome"] = $ChromeAPI.versions[5].version
 
 # Those to pull from web with regex
 
