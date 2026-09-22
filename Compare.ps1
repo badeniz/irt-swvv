@@ -77,7 +77,7 @@ $HTML_Head = @"
     .links a.UTD { color: #28a745; }
     .meta-info { color: #555; font-size: 14px; margin-bottom: 15px; line-height: 1.6; }
     .scan-alert { color: #dc3545; font-weight: bold; }
-    .scan-outdated { color: #808080; font-weight: bold; }
+    .scan-outdated { color: #dc3545; font-weight: bold; }
     .mid-alert { color: #ff9c07; font-weight: bold; }
     
     /* Button Styles */
